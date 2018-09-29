@@ -1,2 +1,2 @@
 # pythonssh
-Very primitive python ssh client for POSIX systems using pexpect library
+Very primitive implementation of pexpect to demonstrate basic syntaxes
