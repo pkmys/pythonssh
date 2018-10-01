@@ -6,6 +6,7 @@ try:
     import socket
     import sys
     import os
+    import re
 
 except ImportError, e:
     print(e, "try installing missing packages using pip")
@@ -42,6 +43,8 @@ def is_valid_ip(ip):
 
 def posixmain():
 
+    global destDir
+
     user = raw_input("enter username: ")
     mgmtIP = raw_input("enter management IP: ")
     if(is_valid_ip(mgmtIP)):
@@ -70,23 +73,20 @@ def posixmain():
 
                     print(tmpOut[1])
                     
-                    if( fileName in tmpOut[1] ):
+                    if( "No such file or directory" not in tmpOut[1] ):
                         child.sendline("pwd")
                         child.expect("[#/$] ")
                         tmpOut = child.before
                         tmpOut = tmpOut.split('\r\n')
 
                         srcDir = tmpOut[1]+"/"+fileName
+                        destDir = destDir+"/"+fileName
 
-                        child.sendline("scp "+user+'@'+mgmtIP+':'+srcDir+' '+destDir)
-                        child.expect("password:")
-                        child.sendline(passwd)
-                        child.expect("[#/$] ")
-                        print("scp: file copied successfully"+"<"+srcDir+">")
-                        prev = ""
-                        continue
-                        
-                        inactive = '''                     
+#                        child.sendline("scp "+user+'@'+mgmtIP+':'+srcDir+' '+destDir)
+#                        child.expect("password:")
+#                        child.sendline(passwd)
+#                        child.expect("[#/$] ")
+                   
                         try:
                             scpObj.get(srcDir, destDir)
                         except:
@@ -96,7 +96,7 @@ def posixmain():
                         print("scp: file copied successfully"+"<"+tmpOut[0]+">")
                         prev = ""
                         continue
-'''
+
                     else:
                         print("scp: file not found"+"<"+tmpOut[0]+">")
                         prev = tmpOut[-2]

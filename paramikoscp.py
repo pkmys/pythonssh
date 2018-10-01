@@ -31,6 +31,7 @@ def is_valid_ip(ip):
         return False
 
 def browse(session, sftp):
+    global destDir
     input=""
     while(1):
         print("paramikoscp:$ ", end="")
@@ -48,12 +49,14 @@ def browse(session, sftp):
             input = input+";"+otherInput
             if(otherInput[:4] == "scp "):
                 srcPath += otherInput[4:]
+                destDir = destDir+"/"+otherInput[4:]
                 try:
                     sftp.get(srcPath, destDir)
                     print("scp: file copied successfully"+"<"+srcPath+">")
                     continue
                 except:
                     print("scp: unable to complete operation [Internal Error]")
+                    session.exec_command("rm -f "+destDir)
                     continue
                 print(srcPath)    
                 
@@ -96,4 +99,7 @@ def mainscp(local, *args):
         print("Connection closed")
 
 if(__name__ == "__main__"):
-    mainscp(True)
+    try:
+        mainscp(True)
+    except:
+        print("unknown error")
