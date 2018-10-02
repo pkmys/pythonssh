@@ -13,7 +13,9 @@ except ImportError, e:
     exit()
 
 destDir = os.getcwd()
-os.environ['http_proxy']=''
+os.environ['http_proxy'] = ''
+promptType='$ '
+
 
 def login(user, mgmtIP, passwd):
     child = pexpect.spawn("ssh "+user+"@"+mgmtIP)
@@ -22,7 +24,7 @@ def login(user, mgmtIP, passwd):
         child.sendline(passwd)
     else:
         return -1
-    i = child.expect(["Permission denied", user+"@.*:.*[#\$] "])
+    i = child.expect(["Permission denied", user+"@.*:.*[#/$] "])
 
     if(i == 0):
         print("permission denied")
@@ -32,25 +34,17 @@ def login(user, mgmtIP, passwd):
         return child
 
 
-def is_valid_ip(ip):
-
-    if(ip == "localhost"):
-        return True
-    else:
-        socket.inet_aton(ip)
-        return True
-
-
 def posixmain():
 
     global destDir
+    global promptType
 
     user = raw_input("enter username: ")
     mgmtIP = raw_input("enter management IP: ")
-    if(is_valid_ip(mgmtIP)):
+    if(paramikoscp.isValidIP(mgmtIP)):
         passwd = getpass.getpass(prompt=user+"@"+mgmtIP+"'s password:")
         child = login(user, mgmtIP, passwd)
-        scpObj = paramikoscp.mainscp(False, mgmtIP,user, passwd)
+        scpObj = paramikoscp.mainscp(False, mgmtIP, user, passwd)
 
     if (child == -1):
         print("login failed")
@@ -58,11 +52,28 @@ def posixmain():
     else:
         input = ""
         prev = ""
+        if(user=="root"):
+            promptType='# '
+        child.before = '''
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    PYSSH
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(C) 2018 Pawan Kumar
+
+ @Usage: 
+      exit<"exit","logout","cntl+c"      >
+      ????????????????????????????????????
+       vim not supported use cat instead
+      ????????????????????????????????????
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+pyssh:'''
         try:
             while (input != "exit" or input != "logout"):
                 out = child.before.strip(prev+'\r\n')
-                input = raw_input(out+"$ ")
+                input = raw_input(out+promptType)
                 prev = input
+                input.lstrip(" ")
                 if(input[:4] == "scp "):
                     child.sendline("ls "+input[4:])
                     child.expect("[#/$] ")
@@ -71,9 +82,7 @@ def posixmain():
                     fileName = input[4:]
                     tmpOut = tmpOut.split('\r\n')
 
-                    print(tmpOut[1])
-                    
-                    if( "No such file or directory" not in tmpOut[1] ):
+                    if("No such file or directory" not in tmpOut[1]):
                         child.sendline("pwd")
                         child.expect("[#/$] ")
                         tmpOut = child.before
@@ -82,18 +91,15 @@ def posixmain():
                         srcDir = tmpOut[1]+"/"+fileName
                         destDir = destDir+"/"+fileName
 
-#                        child.sendline("scp "+user+'@'+mgmtIP+':'+srcDir+' '+destDir)
-#                        child.expect("password:")
-#                        child.sendline(passwd)
-#                        child.expect("[#/$] ")
-                   
                         try:
                             scpObj.get(srcDir, destDir)
                         except:
-                            print("scp: unable to complete operation [Internal Error]")
+                            print(
+                                "scp: unable to complete operation [Internal Error]")
                             prev = tmpOut[0]+'\r\n'+tmpOut[1]
                             continue
-                        print("scp: file copied successfully"+"<"+tmpOut[0]+">")
+                        print("scp: file copied successfully" +
+                              "<"+tmpOut[0]+">")
                         prev = ""
                         continue
 
@@ -102,11 +108,36 @@ def posixmain():
                         prev = tmpOut[-2]
                         continue
 
+                elif(input[:5] == "sudo "):
+                    child.sendline(input)
+                    i = child.expect([".*password.*", "[#/$] "])
+                    if(i == 0):
+                        child.sendline(passwd)
+                        i = child.expect(["Permission denied", "[#/$] "])
+                        if(i == 0):
+                            print("Default password not valid, re-enter password")
+                            rootpw = getpass.getpass("passord:")
+                            child.sendline(input)
+                            i = child.expect([".*password.*", "[#/$] "])
+                            if(i == 0):
+                                child.sendline(rootpw)
+                                i = child.expect(["Permission denied", "[#/$] "])
+                                if(i == 0):
+                                    promptType='$ '
+                                    continue
+                            else:
+                                continue
+                            child.expect("[#/$] ")
+                    promptType='# '
+                    continue
+                if(input == "exit"):
+                    promptType='$ '
+
                 child.sendline(input)
                 child.expect("[#/$] ")
 
         except Exception:
-            print("connection closed")
+            pass
         child.kill(0)
 
 
@@ -122,3 +153,5 @@ if (__name__ == "__main__"):
         print(e, "check your input")
     except Exception, e:
         print(e, "please try again")
+    finally:
+        print("connection closed")

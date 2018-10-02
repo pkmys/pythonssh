@@ -3,23 +3,26 @@ try:
     import paramiko
     import getpass
     import socket
+    import errno
     import sys
     import os
-except ImportError,e:
+except ImportError, e:
     print(e, "install missing package using pip")
     exit()
 
 destDir = os.getcwd()
+PATH = "/"
 
-def clear(): 
+def clear():
 
-    if ('nt' in sys.platform or 'win32' in sys.platform): 
-        _ = os.system('cls') 
- 
-    else: 
-        _ = os.system('clear') 
+    if ('nt' in sys.platform or 'win32' in sys.platform):
+        _ = os.system('cls')
 
-def is_valid_ip(ip):
+    else:
+        _ = os.system('clear')
+
+
+def isValidIP(ip):
     try:
         if(ip == "localhost"):
             return True
@@ -30,49 +33,106 @@ def is_valid_ip(ip):
         print(e, "check your input")
         return False
 
+
+def rexists(sftp, path):
+    """os.path.exists for paramiko's SCP object
+    """
+    try:
+        sftp.stat(path)
+    except IOError, e:
+        if e.errno == errno.ENOENT:
+            return False
+        raise
+    else:
+        return True
+
+
+def pathBuilder(xpath,sftp):
+    global PATH
+    spPath = PATH.split('/')
+    xpath.lstrip(" ")
+    if(xpath[0] == '/'):
+        if(rexists(sftp,xpath)):
+            PATH=xpath
+    else:
+        lpath = xpath.split('/')
+        for upath in lpath:
+            if(PATH=="/" and (upath == '..' or upath == '.')):
+                continue
+            else:
+                if(upath == '..'):
+                    spPath=spPath[:-1]
+                    tpath='/'.join(spPath)
+                    if(rexists(sftp,tpath)):
+                        PATH=tpath
+                elif(upath=='.'):
+                    continue
+                elif(upath==''):
+                    continue
+                else:
+                    tpath=PATH+'/'+upath
+                    if(rexists(sftp,tpath)):
+                        PATH=tpath
+
+
 def browse(session, sftp):
     global destDir
-    input=""
+    global PATH
+    input = ""
+    print('''
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                 PARAMIKO-SCP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(C) 2018 Pawan Kumar
+
+ @Usage: 
+      exit<"exit","logout","cntl+c"      >
+      scp <use absolute path or cd to dir>
+	  <then issue "scp FILENAME"     >
+ 
+ <To issue a command in a particular dir. use >
+ <cd /path/to/dir[ENTER] then issue command   >
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~''')
+
     while(1):
-        print("paramikoscp:$ ", end="")
+        print("paramikoscp:"+PATH+"> ", end="")
         input = raw_input()
         if(input == "exit" or input == "logout" or input == "quit"):
             break
-#        elif(input[:4] == "scp "):
-#            try:
+        
+        input=input.lstrip(' ')
+        if(input[:3] == "cd "):
+            pathBuilder(input[3:],sftp)
 
-        otherInput = input
-        srcPath = ""
-        while("cd " in otherInput):
-            srcPath += otherInput[3:]+"/"
-            otherInput=raw_input(input+";")
-            input = input+";"+otherInput
-            if(otherInput[:4] == "scp "):
-                srcPath += otherInput[4:]
-                destDir = destDir+"/"+otherInput[4:]
-                try:
-                    sftp.get(srcPath, destDir)
-                    print("scp: file copied successfully"+"<"+srcPath+">")
-                    continue
-                except:
-                    print("scp: unable to complete operation [Internal Error]")
-                    session.exec_command("rm -f "+destDir)
-                    continue
-                print(srcPath)    
-                
+        if(input[:4] == "scp "):
+            srcPath = PATH
+            destDir = destDir+"/"+input[4:]
+            srcPath = srcPath+"/"+input[4:]
+
+            try:
+                sftp.get(srcPath, destDir)
+                print("scp: file copied successfully"+"<"+srcPath+">")
+                continue
+            except:
+                print("scp: unable to complete operation [Internal Error]")
+                continue
+
         if("clear" in input):
             clear()
             continue
         else:
-            stdin,stdout,stderr=session.exec_command(input)
+            stdin, stdout, stderr = session.exec_command("cd "+PATH+";"+input)
 
         for line in iter(stdout.readline, ""):
             print(line, end="")
 
+
 def mainscp(local, *args):
 
-    if( len(args) == 0 and local == True):
-        session =paramiko.SSHClient()
+    global PATH
+
+    if(len(args) == 0 and local == True):
+        session = paramiko.SSHClient()
         session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         user = raw_input("enter username: ")
@@ -87,16 +147,17 @@ def mainscp(local, *args):
         sftp = paramiko.SFTPClient.from_transport(transport)
         return sftp
 
-
-    if(is_valid_ip(mgmtIP)):
+    if(isValidIP(mgmtIP)):
         session.connect(hostname=mgmtIP, username=user, password=passwd)
         transport = paramiko.Transport((mgmtIP, 22))
         transport.connect(username=user, password=passwd)
         sftp = paramiko.SFTPClient.from_transport(transport)
     try:
+        PATH="/home/"+user
         browse(session, sftp)
     except KeyboardInterrupt:
         print("Connection closed")
+
 
 if(__name__ == "__main__"):
     try:
